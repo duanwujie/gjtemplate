@@ -1,8 +1,8 @@
 <chart>
-id=131322084116951332
-symbol=AUDJPY
-period=240
-leftpos=1966
+id=131353140517191881
+symbol=GBPJPY
+period=60
+leftpos=3049
 digits=3
 scale=8
 graph=1
@@ -21,8 +21,8 @@ shift_size=20
 fixed_pos=0
 window_left=26
 window_top=26
-window_right=946
-window_bottom=533
+window_right=1046
+window_bottom=300
 window_type=3
 background_color=0
 foreground_color=16777215
@@ -35,7 +35,6 @@ volumes_color=3329330
 grid_color=10061943
 askline_color=255
 stops_color=255
-
 
 <window>
 height=101
@@ -392,14 +391,6 @@ show_data=1
 </indicator>
 </window>
 
-<window>
-height=101
-fixed_height=0
-<indicator>
-name=main
-</indicator>
-</window>
-period=15
 <window>
 height=49
 fixed_height=0
