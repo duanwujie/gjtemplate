@@ -23,19 +23,35 @@
 #property indicator_minimum	-100
 
 //---- input parameters
-extern int	TimeFrame	= 240,		// {1=M1, 5=M5, 15=M15, ..., 1440=D1, 10080=W1, 43200=MN1}
-				KPeriod		= 14,
-				DPeriod		= 3,
-				Slowing		= 3,
-				MAMethod		= 0,		// {0=SMA, 1=EMA, 2=SMMA, 3=LWMA}
-				PriceField	= 0;		// {0=Hi/Low, 1=Close/Close}
+extern int	TimeFrame	= 240;   // {1=M1, 5=M5, 15=M15, ..., 1440=D1, 10080=W1, 43200=MN1}
+input int 	KPeriod		= 14;
+input int   DPeriod		= 3;
+input int	Slowing		= 3;
+input int   MAMethod		= 0;		// {0=SMA, 1=EMA, 2=SMMA, 3=LWMA}
+input int   PriceField	= 0;		// {0=Hi/Low, 1=Close/Close}
+input int   ExtAfterSeconds      = 300; //Th interval seconds per warning.
+input int   ExtMaxMailAterTimes  = 5;   //Times of email warning
+input bool  EnableMailWaring     = true;//True to enable email warning
+
+
+input float ExtDownLevel = 76.4;
+input float ExtUpLevel = 23.6;
 
 //---- indicator buffers
-double		BufferK[],
-				BufferK_Curr[];
+double		BufferK[];
+double      BufferK_Curr[];
 double      BufferSingal[];
 double      BufferUp[];
 double      BufferDown[];
+
+
+
+
+
+datetime LastWaringDate;
+bool     Noticed = false;
+int      CurrentNoticedTimes = 0;
+uint     LastTickCount  = 0;
 
 //----
 string	IndicatorName = "",
@@ -79,15 +95,16 @@ int init()
 	
  	SetIndexLabel(3,"Up Signal");
  	SetIndexLabel(4,"Down Signal");
+ 	
+ 	LastWaringDate = TimeCurrent();
+   Noticed  = false;
+   LastTickCount = 0;
  	return 0;
 }
 
 //+------------------------------------------------------------------+
 int deinit()
 {
-	if(TimeLabelName!="")
-	if(ObjectFind	(TimeLabelName) != -1)
-		ObjectDelete(TimeLabelName);
 	return 0;
 }
 
@@ -155,12 +172,13 @@ int start()
 	   
 	   //	apply interpolation
 		double factor = 1.0 / n;
-		if(shift1>=1)
+		if(shift1>=1){
    		if(BufferK[shift2+n]!=EMPTY_VALUE && BufferK[shift2]!=EMPTY_VALUE)
    		{
    			for(int k = 1; k < n; k++)
    				BufferK[shift2+k] = k*factor*BufferK[shift2+n] + (1.0-k*factor)*BufferK[shift2];
    		}
+   	}
    	
 		
 	   //	current candle
@@ -184,10 +202,16 @@ int start()
 	
 	for(int l = current_start-1;l>=0;l--)
 	{
-	   if(BufferSingal[l+1] > 80 && BufferSingal[l]<=80)
+	   if(BufferSingal[l+1] > ExtDownLevel && BufferSingal[l]<=ExtDownLevel){
 	      BufferDown[l] = -100;
-	   if(BufferSingal[l+1] < 20 && BufferSingal[l]>=20)
+	      if(l == 0 && EnableMailWaring)
+	         iWaring(l,-1,0);
+	   }
+	   if(BufferSingal[l+1] < ExtUpLevel && BufferSingal[l]>=ExtUpLevel){
 	      BufferUp[l] = 100;
+	      if(l == 0 && EnableMailWaring)
+	         iWaring(l,1,0);
+	   }
 	}
    
 
@@ -195,7 +219,76 @@ int start()
 }
 
 
+string PTT()
+{
+   int period =Period();
+   if(period == PERIOD_H4)
+      return "H4";
+   if(period == PERIOD_H1)
+      return "H1";
+   if(period == PERIOD_M30)
+      return "M20";
+   if(period == PERIOD_M15)
+      return "M15";
+   if(period == PERIOD_M5)
+      return "M4";
+   if(period == PERIOD_D1)
+      return "D1";
+   if(period == PERIOD_W1)
+      return "W1";
+   return "Other";
+}
 
 
+int Event(uint seconds)
+{
+  uint currentTickCount = GetTickCount();
+  if(currentTickCount - LastTickCount > seconds*1000)
+  {
+      LastTickCount = currentTickCount;
+      return 1;
+  }
+  return false;
+}
 
 
+void iSendEmail(int direction,double percent)
+{
+   string msg,subject;
+   if(direction < 0)
+   {
+      msg = Symbol()+"+Sell"; 
+      subject = "SellSignal-"+Symbol()+"-"+PTT();
+      SendMail(subject,msg);
+   }
+   if(direction > 0)
+   {
+      msg = Symbol()+"+Buy"; 
+      subject = "BuySignal-"+Symbol()+"-"+PTT();
+      SendMail(subject,msg);
+   }
+}
+
+
+void iWaring(int shift,int direction,double percent)
+{
+   datetime current_time = iTime(NULL,PERIOD_CURRENT,shift);
+   if(LastWaringDate < current_time)
+   {
+      Noticed = false;
+      LastWaringDate = current_time;
+      CurrentNoticedTimes  = 0;
+   }
+   if(!Noticed)
+   {
+      if(Event(ExtAfterSeconds))
+      {
+         CurrentNoticedTimes++;
+         iSendEmail(direction,percent);
+      }
+      if(CurrentNoticedTimes == ExtMaxMailAterTimes)
+      {
+         Noticed = true;
+      }
+   }
+}
