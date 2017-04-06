@@ -6,12 +6,15 @@
 #property link "duanwujie"
 #property indicator_separate_window
 #property strict
-#property indicator_buffers	2
+#property indicator_buffers	3
 #property indicator_color1		Green	
 #property indicator_color2		Red 		
 
 #property indicator_width1    3
 #property indicator_width2    3
+
+#property indicator_width3    1
+#property indicator_color3    Black
 
 #property indicator_maximum	100
 #property indicator_minimum	-100
@@ -25,14 +28,15 @@ input int  PriceField	= 0;		// {0=Hi/Low, 1=Close/Close}
 input int  ExtAfterSeconds      = 300; //Th interval seconds per warning.
 input int  ExtMaxMailAterTimes  = 5;   //Times of email warning
 input bool EnableMailWaring     = true;//Enable email warning
-input bool ShowSignal1 = true;   //Show Strong signal
-input bool ShowSignal2 = true;   //Show Middle Strong signal
+input bool ShowSignal1 = false;   //Show Strong signal
+input bool ShowSignal2 = false;   //Show Middle Strong signal
 input bool ShowSignal3 = true;   //Show Weak signal
-input bool ShowSignal4 = true;   //Show Pullback signal
+input bool ShowSignal4 = false;   //Show Pullback signal
 
 //---- indicator buffers
 double      BufferUp[];
 double      BufferDown[];
+double      BufferHorizontal[];
 
 
 //---- internal parameters
@@ -65,6 +69,8 @@ int init()
  	SetIndexLabel(1,"Down Signal");
  	
  	
+   SetIndexBuffer(2,BufferHorizontal);
+	SetIndexStyle(2,DRAW_LINE);
  	
  	LastWaringDate = TimeCurrent();
    Noticed  = false;
@@ -85,18 +91,19 @@ int deinit()
 
 
 int LastDirection  = 0;
-int iCustomSignal(int shift)
+int iCustomStochasticSignal(int shift)
 {
    int mode = 0;
    double current_H4 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H4,KPeriod,DPeriod,Slowing,mode,shift);
    double previous_H4 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H4,KPeriod,DPeriod,Slowing,mode,shift+1);
+   
    double current_H1  = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H1,KPeriod,DPeriod,Slowing,mode,shift);
    double previous_H1 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H1,KPeriod,DPeriod,Slowing,mode,shift+1);
+   
    double current_M30 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_M30,KPeriod,DPeriod,Slowing,mode,shift);
    double previous_M30 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_M30,KPeriod,DPeriod,Slowing,mode,shift+1);
    
-   
-   int sell_condition1 = current_H4<=80 && previous_H4>80;
+   int sell_condition1 = (current_H4<=80) && (previous_H4>80);
    int sell_condition2 = current_H1>=50  && previous_H1<70;
    int sell_condition3 = current_M30>=50  && previous_M30<70;
    
@@ -105,8 +112,6 @@ int iCustomSignal(int shift)
    int buy_condition2 = current_H1>20  && previous_H1<50;
    int buy_condition3 = current_M30>20  && previous_M30<50;
    
-   
-  
    if(sell_condition1 && sell_condition2 && sell_condition3){
       if(ShowSignal1)
          BufferDown[shift] = -100;
@@ -123,8 +128,6 @@ int iCustomSignal(int shift)
       LastDirection = -1;
       return -1;
    }
-   
-
    
    if(buy_condition1 && buy_condition2 && buy_condition3){
       if(ShowSignal1)
@@ -143,22 +146,33 @@ int iCustomSignal(int shift)
       return 1;
    }
    
-   
    if(LastDirection == 1 && previous_H1<20 &&  current_H1>=20 && current_H4 > previous_H4)
    {
       if(ShowSignal4)
-         BufferUp[shift] = 100;
+         BufferUp[shift] = 20;
       return 1;
    }
    
    if(LastDirection == -1 && previous_H1>70 && current_H1<= 70 && current_H4 < previous_H4)
    {
       if(ShowSignal4)
-         BufferDown[shift] = -100;
+         BufferDown[shift] = -20;
       return -1;
    }
+   return 0;
+}
 
-   
+
+int iCustomMacdSignal(int shift)
+{
+
+   return 0;
+}
+
+
+
+int iCustomCCISignal(int shift)
+{
    return 0;
 }
 
@@ -179,7 +193,8 @@ int start()
    limit=MathMin(Bars-200,Bars-counted_bars+1);
    for(int i=0;i<limit;i++)
    {
-     iCustomSignal(i);
+      BufferHorizontal[i] = 0;
+     iCustomStochasticSignal(i);
    }
 	return(0);
 }
