@@ -5,59 +5,46 @@
 //+------------------------------------------------------------------+
 #property link "duanwujie"
 #property indicator_separate_window
-//#property strict
-#property indicator_buffers	3
-#property indicator_color1		Red	// %K line
+#property strict
+#property indicator_buffers	2
+#property indicator_color1		Green	
+#property indicator_color2		Red 		
 
-#property indicator_color2		Red		// %K line of the current candle
-#property indicator_color3    Green
+#property indicator_width1    3
 #property indicator_width2    3
-#property indicator_width3    3
-
-#property indicator_level1		80
-#property indicator_level2		20
 
 #property indicator_maximum	100
-#property indicator_minimum	0
+#property indicator_minimum	-100
 
 //---- input parameters
-extern int	TimeFrame	= 240;   // {1=M1, 5=M5, 15=M15, ..., 1440=D1, 10080=W1, 43200=MN1}
-input int 	KPeriod		= 14;
-input int   DPeriod		= 3;
-input int	Slowing		= 3;
-input int   MAMethod		= 0;		// {0=SMA, 1=EMA, 2=SMMA, 3=LWMA}
-input int   PriceField	= 0;		// {0=Hi/Low, 1=Close/Close}
-input int   ExtAfterSeconds      = 300; //Th interval seconds per warning.
-input int   ExtMaxMailAterTimes  = 5;   //Times of email warning
-input bool  EnableMailWaring     = true;//True to enable email warning
-
-
-input float ExtDownLevel = 76.4;
-input float ExtUpLevel = 23.6;
+input int  KPeriod		= 14;
+input int  DPeriod		= 3;
+input int  Slowing		= 3;
+input int  MAMethod		= 0;		// {0=SMA, 1=EMA, 2=SMMA, 3=LWMA}
+input int  PriceField	= 0;		// {0=Hi/Low, 1=Close/Close}
+input int  ExtAfterSeconds      = 300; //Th interval seconds per warning.
+input int  ExtMaxMailAterTimes  = 5;   //Times of email warning
+input bool EnableMailWaring     = true;//Enable email warning
+input bool ShowSignal1 = true;   //Show Strong signal
+input bool ShowSignal2 = true;   //Show Middle Strong signal
+input bool ShowSignal3 = true;   //Show Weak signal
+input bool ShowSignal4 = true;   //Show Pullback signal
 
 //---- indicator buffers
-double		BufferK[];
-double      BufferK_Curr[];
-double      BufferSingal[];
 double      BufferUp[];
 double      BufferDown[];
 
 
-
-
-
+//---- internal parameters
 datetime LastWaringDate;
 bool     Noticed = false;
 int      CurrentNoticedTimes = 0;
 uint     LastTickCount  = 0;
 
 //----
-string	IndicatorName = "",
-			TimeLabelName = "";
+string	IndicatorName = "";
+
 			
-			
-double lowlimit=20;
-double highlimit=80;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -65,40 +52,28 @@ double highlimit=80;
 int init()
 {
 //---- name for DataWindow and indicator subwindow label
-	switch(TimeFrame)
-	{
-		case 1:		IndicatorName="Period M1";	break;
-		case 5:		IndicatorName="Period M5"; break;
-		case 15:		IndicatorName="Period M15"; break;
-		case 30:		IndicatorName="Period M30"; break;
-		case 60:		IndicatorName="Period H1"; break;
-		case 240:	IndicatorName="Period H4"; break;
-		case 1440:	IndicatorName="Period D1"; break;
-		case 10080:	IndicatorName="Period W1"; break;
-		case 43200:	IndicatorName="Period MN1"; break;
-		default:	  {TimeFrame = Period(); init(); return(0);}
-	}
-
-	IndicatorName = IndicatorName+" Stoch("+KPeriod+","+DPeriod+","+Slowing+")";
+	IndicatorName = IndicatorName+"Stoch("+KPeriod+","+DPeriod+","+Slowing+")";
 	IndicatorShortName(IndicatorName);  
 	IndicatorDigits(1);
 
 //---- indicator lines
-	SetIndexBuffer(0,BufferK);
-	SetIndexBuffer(1,BufferUp);
-	SetIndexBuffer(2,BufferDown);
- 	SetIndexStyle(0,DRAW_LINE);
-	SetIndexStyle(1,DRAW_NONE);
-	SetIndexStyle(2,DRAW_NONE);
-
-	
- 	SetIndexLabel(1,"Up Signal");
- 	SetIndexLabel(2,"Down Signal");
+	SetIndexBuffer(0,BufferUp);
+	SetIndexBuffer(1,BufferDown);
+	SetIndexStyle(0,DRAW_HISTOGRAM);
+	SetIndexStyle(1,DRAW_HISTOGRAM);
+ 	SetIndexLabel(0,"Up Signal");
+ 	SetIndexLabel(1,"Down Signal");
+ 	
+ 	
  	
  	LastWaringDate = TimeCurrent();
    Noticed  = false;
    LastTickCount = 0;
-      
+   
+   SetIndexDrawBegin(1,200);
+   SetIndexDrawBegin(0,200);   
+   
+   
  	return 0;
 }
 
@@ -109,54 +84,103 @@ int deinit()
 }
 
 
-void MTFSingalStochastic(int shift)
+int LastDirection  = 0;
+int iCustomSignal(int shift)
 {
-	int n = 1;
-   int start_shift = iBarShift(NULL,0,iTime(NULL,TimeFrame,shift));
-   int end_shift = iBarShift(NULL,0,iTime(NULL,TimeFrame,shift+1));
-	double stochK = iStochastic(NULL,TimeFrame,KPeriod,DPeriod,Slowing,MAMethod,PriceField,0,shift);
-	double previousStock = iStochastic(NULL,TimeFrame,KPeriod,DPeriod,Slowing,MAMethod,PriceField,0,shift+1);
-	if(end_shift!=-1 && end_shift!=start_shift)
-      n = end_shift - start_shift;
-	double factor = 1.0 / n;
-   for(int k = 1; k <=n; k++)
-      BufferK[start_shift+k] = k*factor*previousStock + (1.0-k*factor)*stochK;
+   int mode = 0;
+   double current_H4 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H4,KPeriod,DPeriod,Slowing,mode,shift);
+   double previous_H4 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H4,KPeriod,DPeriod,Slowing,mode,shift+1);
+   double current_H1  = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H1,KPeriod,DPeriod,Slowing,mode,shift);
+   double previous_H1 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_H1,KPeriod,DPeriod,Slowing,mode,shift+1);
+   double current_M30 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_M30,KPeriod,DPeriod,Slowing,mode,shift);
+   double previous_M30 = iCustom(NULL,PERIOD_CURRENT,"iCustomStochastic",PERIOD_M30,KPeriod,DPeriod,Slowing,mode,shift+1);
+   
+   
+   int sell_condition1 = current_H4<=80 && previous_H4>80;
+   int sell_condition2 = current_H1>=50  && previous_H1<70;
+   int sell_condition3 = current_M30>=50  && previous_M30<70;
+   
+   
+   int buy_condition1 = current_H4>=20 && previous_H4<20;
+   int buy_condition2 = current_H1>20  && previous_H1<50;
+   int buy_condition3 = current_M30>20  && previous_M30<50;
+   
+   
+  
+   if(sell_condition1 && sell_condition2 && sell_condition3){
+      if(ShowSignal1)
+         BufferDown[shift] = -100;
+      LastDirection = -1;
+      return -1;
+   }else if(sell_condition1 && sell_condition2){
+      if(ShowSignal2)
+         BufferDown[shift] = -80;
+      LastDirection = -1;
+      return -1;
+   }else if(sell_condition1){
+      if(ShowSignal3)
+         BufferDown[shift] = -60;
+      LastDirection = -1;
+      return -1;
+   }
+   
+
+   
+   if(buy_condition1 && buy_condition2 && buy_condition3){
+      if(ShowSignal1)
+         BufferUp[shift] = 100;
+      LastDirection = 1;
+      return 1;
+   }else if(buy_condition1 && buy_condition2){
+      if(ShowSignal2)
+         BufferUp[shift] = 80;
+      LastDirection = 1;
+      return 1;
+   }else if(buy_condition1){
+      if(ShowSignal3)
+         BufferUp[shift] = 60;
+      LastDirection = 1;
+      return 1;
+   }
+   
+   
+   if(LastDirection == 1 && previous_H1<20 &&  current_H1>=20 && current_H4 > previous_H4)
+   {
+      if(ShowSignal4)
+         BufferUp[shift] = 100;
+      return 1;
+   }
+   
+   if(LastDirection == -1 && previous_H1>70 && current_H1<= 70 && current_H4 < previous_H4)
+   {
+      if(ShowSignal4)
+         BufferDown[shift] = -100;
+      return -1;
+   }
+
+   
+   return 0;
 }
 
 
+
+
+
+
+
+
 //+------------------------------------------------------------------+
-//| MTF Stochastic                                                   |
+//| start                                                            |
 //+------------------------------------------------------------------+
 int start()
 {
-
-//----
-//	counted bars from indicator time frame
-	static int countedBars1 = 0;
-
-//----
-//	counted bars from display time frame
-	if(Bars-1-IndicatorCounted() > 1 && countedBars1!=0)
-		countedBars1 = 0;
-
-	int bars1 = iBars(NULL,PERIOD_H4),
-		 start1 = bars1-1-countedBars1,
-		 limit1 = iBarShift(NULL,PERIOD_H4,Time[Bars-1]);
-
-	if(countedBars1 != bars1-1)
-	{
-		countedBars1  = bars1-1;
-		ArrayInitialize(BufferK_Curr,EMPTY_VALUE);
-	}
-
-	if(start1 > limit1 && limit1 != -1)
-		start1 = limit1;
-
-	for(int i = start1; i >= 0; i--)
-	{
-      MTFSingalStochastic(i);
+   int limit;
+   int counted_bars=IndicatorCounted();
+   limit=MathMin(Bars-200,Bars-counted_bars+1);
+   for(int i=0;i<limit;i++)
+   {
+     iCustomSignal(i);
    }
-   
 	return(0);
 }
 
