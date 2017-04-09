@@ -32,10 +32,10 @@
 
 
 
-#define TREND_UP 0
-#define TREND_DOWN 1
-#define TREND_RANGE 2
-#define TREND_OFF 3
+#define TREND_UP 0			/*趋势向上*/
+#define TREND_DOWN 1		/*趋势向下*/
+#define TREND_RANGE 2		/*区间*/
+#define TREND_OFF 3			/*没有趋势*/
 
 
 //2000
@@ -226,11 +226,12 @@ extern int      TPArray5            = 0;
 //+-----------------------------------------------------------------+
 //| Internal arguments set                                          |
 //+-----------------------------------------------------------------+
-int         ca;
-int         Magic,hMagic;
-int         CbT;//Total count exclude EA's order
-int         CpT;//Total bl,sl,bs,ss'count
-int         ChT;
+int         ca;		
+int         Magic;  //Magic Number
+int			hMagic; //Hedge Magic Number  Hedge:对冲
+int         CbT;    //Total count of basket order (buy+sell)
+int         CpT;    //Total count of pending order (bl+sl+ss+bs)
+int         ChT;    //Total count of hedge order (hedge buy + hedge sell)
 double      Pip,hPip;
 int         POSLCount;
 double      SLbL;
@@ -238,14 +239,17 @@ int         Moves;
 double      MaxDD;
 double      SLb;
 int         AccountType;
-double      StopTradeBalance;
-double      InitialAB;/* the initial acount balance at the ea beginning */
+double      StopTradeBalance;/*该净值是，单子亏损导致净值达到这个时，停止交易*/
+double      InitialAB;/*EA开始运行时账户的净值*/
 bool        Testing,Visual;
 bool        AllowTrading;
 bool        EmergencyWarning;
 double      MaxDDPer;
 int         Error,y;
-int         Set1Level,Set2Level,Set3Level,Set4Level;
+int         Set1Level;
+int         Set2Level;
+int         Set3Level;
+int         Set4Level;
 int         EmailCount;
 string      sTF;
 datetime    EmailSent;
@@ -260,20 +264,29 @@ string      CS,UAE;
 int         HolShutDown;
 datetime    HolArray[,4];
 datetime    HolFirst,HolLast,NextStats;
-datetime    OTbF;
+datetime    OTbF; //Opentime of the first basket order
 double      RSI[];
 int         Digit[,2],TF[10]={0,1,5,15,30,60,240,1440,10080,43200};
 
 double      Email[3];
-double      EETime,PbC,PhC;
+double      EETime;
+double      PbC;
+double      PhC;
 double      hDDStart;
-double 		PbMax,PbMin;/*最大利润和最小利润*/
-double		PhMax,PhMin;/*EA最大利润和最小利润*/
+double 		PbMax;//The max profit of basket order
+double      PbMin;//The min profit of basket order
+double		PhMax;//The max profit of hedge order
+double      PhMin;//The min profit of hedge order
 double		LastClosedPL,ClosedPips,SLh,hLvlStart,StatLowEquity,StatHighEquity;
-int         hActive,EECount,TbF,CbC,CaL,FileHandle;
-bool        TradesOpen,FileClosed,HedgeTypeDD,hThisChart,hPosCorr,dLabels,FirstRun;
+int         hActive,EECount;
+int         TbF;	//Ticket of the first basket order
+int         CbC,CaL,FileHandle;
+bool        TradesOpen;
+bool        FileClosed,HedgeTypeDD,hThisChart,hPosCorr,dLabels,FirstRun;
 string      FileName,ID,StatFile;
-double      TPb,StopLevel,TargetPips,LbF,bTS;
+double      TPb,StopLevel,TargetPips;
+double      LbF;//Lots of the first basket order
+double      bTS;
 
 
 
@@ -362,8 +375,10 @@ int init()
 	StopTradeBalance=InitialAB*(1-StopTradePercent);
 	Testing=IsTesting();
 	Visual=IsVisualMode();
-	if(Testing)ID="B3Test.";
-	else ID=DTS(Magic,0)+".";
+	if(Testing)
+		ID="B3Test.";
+	else 
+		ID=DTS(Magic,0)+".";
 	HideTestIndicators(true);
 
 	MinLotSize=MarketInfo(Symbol(),MODE_MINLOT);
@@ -537,19 +552,27 @@ int init()
 	}
 	else
 	{	while(GridIndex<4)
-		{	GridSet=StrToInteger(StringSubstr(SetCountArray,0,StringFind(SetCountArray,",")));
+		{	
+			GridSet=StrToInteger(StringSubstr(SetCountArray,0,StringFind(SetCountArray,",")));
 			SetCountArray=StringSubstr(SetCountArray,StringFind(SetCountArray,DTS(GridSet,0))+2);
 			if(GridIndex==0&&GridSet<1)
 			{	GridError=1;
 				break;
 			}
-			if(GridSet>0)GridLevel+=GridSet;
-			else if(GridLevel<MaxTrades)GridLevel=MaxTrades;
-			else GridLevel=MaxTrades+1;
-			if(GridIndex==0)Set1Level=GridLevel;
-			else if(GridIndex==1&&GridLevel<=MaxTrades)Set2Level=GridLevel;
-			else if(GridIndex==2&&GridLevel<=MaxTrades)Set3Level=GridLevel;
-			else if(GridIndex==3&&GridLevel<=MaxTrades)Set4Level=GridLevel;
+			if(GridSet>0)
+				GridLevel+=GridSet;
+			else if(GridLevel<MaxTrades)
+				GridLevel=MaxTrades;
+			else 
+				GridLevel=MaxTrades+1;
+			if(GridIndex==0)
+				Set1Level=GridLevel;
+			else if(GridIndex==1&&GridLevel<=MaxTrades)
+				Set2Level=GridLevel;
+			else if(GridIndex==2&&GridLevel<=MaxTrades)
+				Set3Level=GridLevel;
+			else if(GridIndex==3&&GridLevel<=MaxTrades)
+				Set4Level=GridLevel;
 			GridIndex++;
 		}
 		if(GridError==1||Set1Level==0)
@@ -712,47 +735,66 @@ int deinit()
  */
 int start()
 {	
-	int     CbB          =0;     // Count buy,exclude EA
-	int     CbS          =0;     // Count sell,exclude EA
-	int     CpBL         =0;     // Count buy limit
-	int     CpSL         =0;     // Count sell limit
-	int     CpBS         =0;     // Count buy stop
-	int     CpSS         =0;     // Count sell stop
-	double  LbB          =0;     // Count buy lots
-	double  LbS          =0;     // Count sell lots
-	double  LbT          =0;     // total lots out
+	
+
+	int     CpBL         =0;     // Total count of buy limit
+	int     CpSL         =0;     // Total count of sell limit
+	int     CpBS         =0;     // Total count of buy stop
+	int     CpSS         =0;     // Total count of sell stop
+
+
+	double  LbT          =0;     // Total lots of basket order(buy+sell)
 	double  OPpBL        =0;     // Buy limit open price
 	double  OPpSL        =0;     // Sell limit open price
 	double  SLbB         =0;     // stop losses are set to zero if POSL off
 	double  SLbS         =0;     // stop losses are set to zero if POSL off
-	double  BCb,BCh,BCa;         // Broker costs (swap + commission)
+	double  BCb          =0;	 // Broker costs of basket order
+	double  BCh          =0;     // Broker costs of hedge order
+	double  BCa          =0;     // Broker costs (swap + commission) [basket + hedge]
 	double  ProfitPot    =0;     // The Potential Profit of a basket of Trades
 	double  PipValue,PipVal2;
 	double  OrderLot;
-	double  OPbL;
-	double	OPhO;                // EA第一单的开仓价格
-	int     OTbL;                // last open time
+
+
 	double  g2,tp2,Entry,RSI_MA;
-	double  LhB;				 // EA Buy单总共的手数
-	double  LhS;                 // EA Sell单总共的手数
-	double  LhT,OPbO,OTbO;
-	double  OThO;				 // EA第一单的开仓时间
-	double  ThO;				 // EA第一单的订单编号
-	double  TbO;
+
+	double  LhT;				//Total lots of hedge order
+
+
+
 
 	int     Ticket;
-	int 	ChB;				 // EA Buy单总共的数量
-	int     ChS;				 // EA Sell单总共的数量
 	int     IndEntry;
-	double  Pb;
-	double  Ph;/*The total profit of all orders which belong to this EA*/
-	double  PaC,PbPips,PbTarget, DrawDownPercentage,BEb,BEh,BEa;
-	bool    BuyMe,SellMe,Success,SetPOSL;
+	double  PaC,PbPips,PbTarget;
+	double  DrawDownPercentage;  //Percent of portion for drawdown level
+	double  BEb,BEh,BEa;
+	bool    BuyMe;
+	bool    SellMe,Success,SetPOSL;
 	string  IndicatorUsed;
 	
+	/*The hedge's var */
+	double  Ph;					 // Total profit of hedge order  (hedge sell profit + hedge buy profit)
+	int 	ChB = 0;			 // Count of hedge buy order
+	int     ChS = 0;			 // Count of hedge sell order
+	double  LhB;				 // Total lots of hedge buy order
+	double  LhS;                 // Total lots of hedge sell order
+	double  OThO;				 // Opentime of the first hedge order
+	double  ThO;				 // Ticket of the first hedge order
+	double	OPhO;                // Openprice of the first hedge order
 	
+	/*The basket's var */
 	
-
+	double  Pb;					 // Total profit of basket order (sell+buy-hedge)
+	int     CbB = 0;             // Count of basket buy order
+	int     CbS = 0;             // Count of basket sell order
+	int     OTbL;                // Opentime of the last basket order
+	double  OPbL;				 // Openprice of the last basket order
+	double  OTbO;				 // Opentime of the first basket order
+    double  TbO;                 // Ticket of the first basket order
+	double  OPbO;                // Openprice of the first basket order
+	double  LbB = 0;             // Total lots of basket buy order
+	double  LbS = 0;             // Total lots of basket sell order
+	
 	//+-----------------------------------------------------------------+
 	//| Count Open Orders, Lots and Totals                              |
 	//+-----------------------------------------------------------------+
@@ -764,8 +806,9 @@ int start()
         if(!OrderSelect(y,SELECT_BY_POS,MODE_TRADES))
             continue;
 		int Type=OrderType();
-		if(OrderMagicNumber()==hMagic){
-			/*Ph:总的利润 */
+		if(OrderMagicNumber()==hMagic) //Process the hedge order
+		{
+			/*Ph:Profit of hedge */
 			Ph+=OrderProfit();/*OrderProfit:当前选中，订单的利润*/
 			BCh+=OrderSwap()+OrderCommission();/*OrderSwap:返回掉期值，OrderCommission() - 获取订单佣金*/
 			BEh+=OrderLots()*OrderOpenPrice(); /*开仓价格*当前订单的手数*/
@@ -791,7 +834,7 @@ int start()
 		if(OrderTakeProfit()>0)
             ModifyOrder(OrderOpenPrice(),OrderStopLoss());
 		if(Type<=OP_SELL)
-		{	Pb+=OrderProfit();
+		{	Pb+=OrderProfit();/*Pb:非对冲单总的利润*/
 			BCb+=OrderSwap()+OrderCommission();
 			BEb+=OrderLots()*OrderOpenPrice();
 			if(OrderOpenTime()>=OTbL)
@@ -836,21 +879,21 @@ int start()
 			else CpSS++;
 		}
 	}
-	CbT=CbB+CbS;/*总的订单数量，不包括EA*/
-	LbT=LbB+LbS;/* total slots exclude EA */
+	CbT=CbB+CbS;
+	LbT=LbB+LbS;
 	Pb=ND(Pb+BCb,2);
-	ChT=ChB+ChS;/* EA总的订单数量*/
+	ChT=ChB+ChS;
 	LhT=LhB+LhS;
 	Ph=ND(Ph+BCh,2);
-	CpT=CpBL+CpSL+CpBS+CpSS; /* buy limit + sell limit + buy stop + sell stop's count */
+	CpT=CpBL+CpSL+CpBS+CpSS; /* Total count of pending order */
 	
 	BCa=BCb+BCh;/*总的交易商手续费*/
 
 	//+-----------------------------------------------------------------+
 	//| Calculate Min/Max Profit and Break Even Points                  |
 	//+-----------------------------------------------------------------+
-	if(LbT>0)/*非EA的总手数>0*/
-	{	BEb=ND(BEb/LbT,Digits);/*计算平均交易商手续费*/
+	if(LbT>0)/*Basket lots >0*/
+	{	BEb=ND(BEb/LbT,Digits);/*计算平均开仓价格*/
 		if(BCa<0)
 			BEb-=ND(BCa/PipVal2/(LbB-LbS),Digits);/* 交易商倒给钱的情况*/
 		if(Pb>PbMax||PbMax==0)
@@ -902,9 +945,11 @@ int start()
 		else TradesOpen=false;
 	}
 	if(LhT>0)
-	{	BEh=ND(BEh/LhT,Digits);
-		if(Ph>PhMax||PhMax==0)PhMax=Ph;
-		if(Ph<PhMin||PhMin==0)PhMin=Ph;
+	{	BEh=ND(BEh/LhT,Digits);/*计算平均开仓价格*/
+		if(Ph>PhMax||PhMax==0)
+			PhMax=Ph;
+		if(Ph<PhMin||PhMin==0)
+			PhMin=Ph;
 	}
 	else
 	{	PhMax=0;
@@ -916,7 +961,7 @@ int start()
 	//| Check if trading is allowed                                     |
 	//+-----------------------------------------------------------------+
 	if(CbT==0 && ChT==0 && ShutDown)
-	{	if(CpT>0) /* if have limit/stop order ,not have other order stop the EA */
+	{	if(CpT>0)/* Exit the pending order */
 		{	
             ExitTrades(P,displayColorLoss,"Blessing is shutting down");
 			return;
@@ -964,8 +1009,8 @@ int start()
     
 	if(Pb+Ph<0)//利润小于0
         DrawDownPercentage=-(Pb+Ph)/PortionBalance;/*  DrawDownPercentage:DrawDown Percentage */
-	if(DrawDownPercentage>=MaxDrawDownPercentage/100)/*回撤率大于最大回测率，退出交易*/
-	{/* Beyond the max drawdown percents stop trading */	
+	if(DrawDownPercentage>=MaxDrawDownPercentage/100) /* Beyond the max drawdown percents stop trading */
+	{   	
         ExitTrades(A,displayColorLoss,"Equity Stop Loss Reached");
 		TryPlaySounds();
 		return;
@@ -982,7 +1027,7 @@ int start()
 	double StepAB=InitialAB*(1+StopTradePercent);
 	double StepSTB=AccountBalance()*(1-StopTradePercent);
 	double NextISTB=StepAB*(1-StopTradePercent);
-	if(StepSTB>NextISTB)
+	if(StepSTB>NextISTB) /*净值增长到110%,更新初始净值，和Stop净值,用于保护利润 */
 	{	
         InitialAB=StepAB;
 		StopTradeBalance=StepSTB;
@@ -1033,7 +1078,7 @@ int start()
             ATrend="R";
 	}
 	//+-----------------------------------------------------------------+
-	//| dwj Hedge/Basket/ClosedTrades Profit Management                     |
+	//| Hedge/Basket/ClosedTrades Profit Management                     |
 	//+-----------------------------------------------------------------+
 	double Pa=Pb;
 	PaC=PbC+PhC;
@@ -1043,7 +1088,7 @@ int start()
 		hActive=0;
 		return;
 	}
-	if(LbT>0)
+	if(LbT>0) /* 还有Basket单子 */
 	{	
 		if(PbC>0||(PbC<0&&RecoupClosedLoss))
 		{	
@@ -1557,7 +1602,7 @@ int start()
 	//| Moving Average Indicator for Order Entry                        |  << Add your own Indicator Entry checks
 	//+-----------------------------------------------------------------+  << after the Moving Average Entry.
 	if(MAEntry>0&&CbT==0&&CpT<2)
-	{	if(Bid>ima_0+MADistance&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+	{	if(Bid>ima_0+MADistance&&(!B3Traditional||(B3Traditional&&Trend!= TREND_RANGE)))
 		{	
 			if(MAEntry==1){	
 				if(ForceMarketCond!=TREND_DOWN &&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
@@ -1814,17 +1859,20 @@ int start()
 	//+-----------------------------------------------------------------+
 	OrderLot=LotSize(Lots[StrToInteger(DTS(MathMin(CbT+CbC,MaxTrades-1),0))]*LotMult);
 	if(CbT==0&&CpT<2&&!FirstRun)
-	{	if(B3Traditional)
+	{	
+		if(B3Traditional)
 		{	if(BuyMe)
 			{	
-				//Buy Stop = 0 and Sell Limit =0 
+				//Buy Stop == 0 && Sell Limit == 0	
 				if(CpBS==0&&CpSL==0&&((Trend!=2||MAEntry==0)||(Trend==TREND_RANGE && MAEntry==1)))
-				{	
+				{
 					Entry=g2-MathMod(Ask,g2)+EntryOffset;
 					if(Entry>StopLevel)
-					{	Ticket=SendOrder(Symbol(),OP_BUYSTOP,OrderLot,Entry,0,Magic,CLR_NONE);
-						if(Ticket>0)
-						{	if(Debug)Print("Indicator Entry - ("+IndicatorUsed+") BuyStop MC = "+Trend);
+					{	
+						Ticket=SendOrder(Symbol(),OP_BUYSTOP,OrderLot,Entry,0,Magic,CLR_NONE);
+						if(Ticket>0){	
+							if(Debug)
+								Print("Indicator Entry - ("+IndicatorUsed+") BuyStop MC = "+Trend);
 							CpBS++;
 						}
 					}
@@ -2470,14 +2518,22 @@ double LotSize(double Lot)
  * @brief 
  * 
  *
- * @return 
- * @param OCmd
- * @param OColor
- * @param OLot
- * @param OMagic
- * @param OPrice
- * @param OSlip
- * @param OSymbol
+
+ * @param OSymbol : 货币对
+ * @param OCmd    : Operation type for the OrderSend(),
+ * 					OP_BUY,
+ * 					OP_SELL,
+ * 					OP_BUYLIMIT,
+ * 					OP_SELLLIMIT,
+ * 					OP_SELLSTOP,
+ * 					OP_BUYSTOP,
+ * @param OLot    : Number of lots
+ * @param OPrice  : Order price.
+ * @param OSlip   : Maximum price slippage for buy or sell orders.
+ * @param OMagic  : Order magic number. May be used as user defined identifier
+ * @param OColor  : Color of the opening arrow on the chart. 
+ *					If parameter is missing or has CLR_NONE value opening arrow is not drawn on the chart.
+ * @return        : 成功，返回订单编号
  */
 int SendOrder(string OSymbol,int OCmd,double OLot,double OPrice,double OSlip,int OMagic,color OColor=CLR_NONE)
 {	
@@ -2487,17 +2543,25 @@ int SendOrder(string OSymbol,int OCmd,double OLot,double OPrice,double OSlip,int
 	int retryTimes=5,i=0;
 	int OType=MathMod(OCmd,2);
 	double OrderPrice;
-	if(AccountFreeMarginCheck(OSymbol,OType,OLot)<=0)return(-1);
-	if(MaxSpread>0&&MarketInfo(OSymbol,MODE_SPREAD)*Point/Pip>MaxSpread)return(-1);
+	if(AccountFreeMarginCheck(OSymbol,OType,OLot)<=0)/*钱不够了，不能开单了*/
+		return(-1);
+	if(MaxSpread>0&&MarketInfo(OSymbol,MODE_SPREAD)*Point/Pip>MaxSpread)/* 差价点数太高也不允许开单*/
+		return(-1);
 	while(i<5)
-	{	i+=1;
-		while(IsTradeContextBusy())Sleep(100);
-		if(IsStopped())return(-1);
-		if(OType==0)OrderPrice=ND(MarketInfo(OSymbol,MODE_ASK)+OPrice,MarketInfo(OSymbol,MODE_DIGITS));
-		else OrderPrice=ND(MarketInfo(OSymbol,MODE_BID)+OPrice,MarketInfo(OSymbol,MODE_DIGITS));
+	{	
+		i+=1;
+		while(IsTradeContextBusy())
+			Sleep(100);
+		if(IsStopped())
+			return(-1);
+		if(OType==0) /*OP_BUY,OP_BUYLIMIT,OP_BUYSTOP */
+			OrderPrice=ND(MarketInfo(OSymbol,MODE_ASK)+OPrice,MarketInfo(OSymbol,MODE_DIGITS));
+		else /*OP_SELL,OP_SELLLIMIT,OP_SELLSTOP */
+			OrderPrice=ND(MarketInfo(OSymbol,MODE_BID)+OPrice,MarketInfo(OSymbol,MODE_DIGITS));
 		Ticket=OrderSend(OSymbol,OCmd,OLot,OrderPrice,OSlip,0,0,TradeComment,OMagic,0,OColor);
 		if(Ticket<0)
-		{	Error=GetLastError();
+		{	
+			Error=GetLastError();
 			if(Error!=0)Print("Error opening order: "+Error+" "+ErrorDescription(Error)
 				+" Symbol: "+OSymbol
 				+" TradeOP: "+OCmd
@@ -2623,24 +2687,35 @@ int ExitTrades(int Type,color Color,string Reason,int OTicket=0)
 		else OTicketNo=OTicket;
 	}
 	for(y=OrdersTotal()-1;y>=0;y--)
-	{	if(!OrderSelect(y,SELECT_BY_POS,MODE_TRADES))continue;
-		if(Type==B&&OrderMagicNumber()!=Magic)continue;
-		else if(Type==H&&OrderMagicNumber()!=hMagic)continue;
-		else if(Type==A&&OrderMagicNumber()!=Magic&&OrderMagicNumber()!=hMagic)continue;
-		else if(Type==T&&OrderTicket()!=OTicket)continue;
-		else if(Type==P&&(OrderMagicNumber()!=Magic||OrderType()<=OP_SELL))continue;
+	{	if(!OrderSelect(y,SELECT_BY_POS,MODE_TRADES))
+			continue;
+		if(Type==B&&OrderMagicNumber()!=Magic)
+			continue;
+		else if(Type==H&&OrderMagicNumber()!=hMagic)
+			continue;
+		else if(Type==A&&OrderMagicNumber()!=Magic&&OrderMagicNumber()!=hMagic)
+			continue;
+		else if(Type==T&&OrderTicket()!=OTicket)
+			continue;
+		else if(Type==P&&(OrderMagicNumber()!=Magic||OrderType()<=OP_SELL))
+			continue;
 		ArrayResize(CloseTrades,CloseCount+1);
 		CloseTrades[CloseCount,0]=OrderOpenTime();
 		CloseTrades[CloseCount,1]=OrderTicket();
 		CloseCount++;
 	}
 	if(CloseCount>0)
-	{	if(!UseFIFO)ArraySort(CloseTrades,WHOLE_ARRAY,0,MODE_DESCEND);
-		else if(CloseCount!=ArraySort(CloseTrades))Print("Error sorting CloseTrades Array");
+	{	if(!UseFIFO)
+			ArraySort(CloseTrades,WHOLE_ARRAY,0,MODE_DESCEND);
+		else if(CloseCount!=ArraySort(CloseTrades))
+			Print("Error sorting CloseTrades Array");
 		for(y=0;y<CloseCount;y++)
-		{	if(!OrderSelect(CloseTrades[y,1],SELECT_BY_TICKET))continue;
-			while(IsTradeContextBusy())Sleep(100);
-			if(IsStopped())return(-1);
+		{	if(!OrderSelect(CloseTrades[y,1],SELECT_BY_TICKET))
+				continue;
+			while(IsTradeContextBusy())
+				Sleep(100);
+			if(IsStopped())
+				return(-1);
 			if(!OrderSelect(CloseTrades[y,1],SELECT_BY_TICKET))continue;
 			if(OrderType()>OP_SELL)Success=OrderDelete(OrderTicket(),Color);
 			else
