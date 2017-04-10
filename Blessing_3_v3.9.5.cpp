@@ -38,6 +38,22 @@
 #define TREND_OFF 3			/*没有趋势*/
 
 
+#define TRADE_OFF 0			/*0 = Off */
+#define TRADE_BASE 1		/* will base entry on indicator */
+#define TRADE_REVERSE 2     /* will trade in reverse */
+
+
+#define NO_BASKET_ORDERS 0
+#define NO_HEDGE_ORDERS 0
+
+#define NO_BUY_STOP_ORDERS 0
+#define NO_BUY_LIMIT_ORDERS 0
+#define NO_SELL_STOP_ORDERS 0
+#define NO_SELL_LIMIT_ORDERS 0
+
+
+
+
 //2000
 
 //+-----------------------------------------------------------------+
@@ -256,9 +272,10 @@ datetime    EmailSent;
 int         GridArray[,2];
 double      Lots[];
 double		MinLotSize;//交易商允许的最小交易手数
-double		LotStep;
+double		LotStep;   //交易手数的最小增量
 double		LotDecimal;
-int         LotMult,MinMult;
+int         LotMult;   //The Multiplier of the lots
+int         MinMult;
 bool        PendLot;
 string      CS,UAE;
 int         HolShutDown;
@@ -287,7 +304,6 @@ string      FileName,ID,StatFile;
 double      TPb,StopLevel,TargetPips;
 double      LbF;//Lots of the first basket order
 double      bTS;
-
 
 
 
@@ -437,15 +453,15 @@ int init()
 	if(ForceMarketCond<0||ForceMarketCond>3)
 		ForceMarketCond=3;
 	if(MAEntry<0||MAEntry>2)
-		MAEntry=0;
+		MAEntry=TRADE_OFF;
 	if(CCIEntry<0||CCIEntry>2)
-		CCIEntry=0;
+		CCIEntry=TRADE_OFF;
 	if(BollingerEntry<0||BollingerEntry>2)
 		BollingerEntry=0;
 	if(StochEntry<0||StochEntry>2)
-		StochEntry=0;
+		StochEntry=TRADE_OFF;
 	if(MACDEntry<0||MACDEntry>2)
-		MACDEntry=0;
+		MACDEntry=TRADE_OFF;
 	if(MaxCloseTrades==0)
 		MaxCloseTrades=MaxTrades;
 
@@ -465,7 +481,7 @@ int init()
 	if(Debug)
 		Print("Lot Multiplier: "+LotMult);
 	for(y=0;y<MaxTrades;y++)
-	{	
+	{
 		if(y==0||Multiplier<1)
 			Lots[y]=Lot;
 		else 
@@ -473,14 +489,30 @@ int init()
 		if(Debug)
 			Print("Lot Size for level "+DTS(y+1,0)+" : "+DTS(Lots[y]*MathMax(LotMult,1),LotDecimal));
 	}
-	//
-	//	0.01,0.02,0.03,0.04,
-	//	0.05,0.06,0.08,0.11
-	//  0.15,0.21,0.29,0.40
-
+	/*
+	 *  LotStep = 0.01
+	 *  Multiplier = 1.4
+	 *
+	 *  Lots[0-14] ={
+	 *		0.01,0.02,0.03,0.04,0.05,
+	 *		0.07,0.09,0.12,0.16,0.22,
+	 *      0.30,0.42,0.58,0.81,1.13
+	 *	}
+	 *
+	 */
+	
 	if(Multiplier<1)
 		Multiplier=1;
 
+	
+	/*   GridArray[15][2]
+	 *
+	 *   [] [] [] [] []
+	 *   [] [] [] [] []
+	 *   [] [] [] [] []
+	 */
+	
+	
 	//+-----------------------------------------------------------------+
 	//| Set Grid and TP array                                           |
 	//+-----------------------------------------------------------------+
@@ -960,7 +992,7 @@ int start()
 	//+-----------------------------------------------------------------+
 	//| Check if trading is allowed                                     |
 	//+-----------------------------------------------------------------+
-	if(CbT==0 && ChT==0 && ShutDown)
+	if(CbT==NO_BASKET_ORDERS && ChT==NO_HEDGE_ORDERS && ShutDown)
 	{	if(CpT>0)/* Exit the pending order */
 		{	
             ExitTrades(P,displayColorLoss,"Blessing is shutting down");
@@ -1035,7 +1067,7 @@ int start()
 	double InitialAccountMultiPortion=StopTradeBalance*PortionPercentage;
 	if(PortionBalance<InitialAccountMultiPortion)
 	{	
-		if(CbT==0)
+		if(CbT==NO_BASKET_ORDERS)
 		{	
 			AllowTrading=false;
 			TryPlaySounds();
@@ -1082,7 +1114,7 @@ int start()
 	//+-----------------------------------------------------------------+
 	double Pa=Pb;
 	PaC=PbC+PhC;
-	if(hActive==1&&ChT==0)
+	if(hActive==1&&ChT==NO_HEDGE_ORDERS)
 	{	
 		PhC=FindClosedPL(H);
 		hActive=0;
@@ -1171,7 +1203,7 @@ int start()
 				Print("LotMult reset to "+DTS(LotMult,0));
 			}
 		}
-		if(CbT==0)
+		if(CbT==NO_BASKET_ORDERS)
 		{	double Contracts,Factor,Lotsize;
 			Contracts=PortionBalance/10000;
 			if(Multiplier<=1)
@@ -1183,7 +1215,7 @@ int start()
 			GlobalVariableSet(ID+"LotMult",LotMult);
 		}
 	}
-	else if(CbT==0)
+	else if(CbT==NO_BASKET_ORDERS)
 		LotMult=MinMult;
 
 
@@ -1363,7 +1395,7 @@ int start()
 	//| Maximize Profit with Moving TP and setting Trailing Profit Stop |
 	//+-----------------------------------------------------------------+
 	if(MaximizeProfit)
-	{	if(CbT==0)
+	{	if(CbT==NO_BASKET_ORDERS)
 		{	SLbL=0;
 			Moves=0;
 			SLb=0;
@@ -1438,7 +1470,7 @@ int start()
 	//+-----------------------------------------------------------------+
 	//| Check for and Delete hanging pending orders                     |
 	//+-----------------------------------------------------------------+
-	if(CbT==0&&!PendLot)
+	if(CbT==NO_BASKET_ORDERS&&!PendLot)
 	{	PendLot=true;
 		for(y=OrdersTotal()-1;y>=0;y--)
 		{	if(!OrderSelect(y,SELECT_BY_POS,MODE_TRADES))continue;
@@ -1456,7 +1488,7 @@ int start()
 		}
 		return;
 	}
-	else if((CbT>0||(CbT==0&&CpT>0&&B3Traditional==false))&&PendLot)
+	else if((CbT>0||(CbT==NO_BASKET_ORDERS&&CpT>0&&B3Traditional==false))&&PendLot)
 	{	PendLot=false;
 		for(y=OrdersTotal()-1;y>=0;y--)
 		{	if(!OrderSelect(y,SELECT_BY_POS,MODE_TRADES))continue;
@@ -1478,9 +1510,9 @@ int start()
 	//| Check ca, Breakeven Trades and Emergency Close All              |
 	//+-----------------------------------------------------------------+
 	switch(ca)
-	{	case B:  if(CbT==0&&CpT==0)ca=0;break;
-		case H:  if(ChT==0)ca=0;break;
-		case A:  if(CbT==0&&CpT==0&&ChT==0)ca=0;break;
+	{	case B:  if(CbT==NO_BASKET_ORDERS&&CpT==0)ca=0;break;
+		case H:  if(ChT==NO_HEDGE_ORDERS)ca=0;break;
+		case A:  if(CbT==NO_BASKET_ORDERS&&CpT==0&&ChT==NO_HEDGE_ORDERS)ca=0;break;
 		case P:  if(CpT==0)ca=0;break;
 		case T:  break;
 		default: break;
@@ -1489,7 +1521,7 @@ int start()
 	{	ExitTrades(ca,displayColorLoss,"Close All ("+DTS(ca,0)+")");
 		return;
 	}
-	if(CbT==0&&ChT>0)
+	if(CbT==NO_BASKET_ORDERS&&ChT>0)
 	{	ExitTrades(H,displayColorLoss,"Basket Closed");
 		return;
 	}
@@ -1542,7 +1574,7 @@ int start()
 			return;
 		}
 		else if(HolShutDown==0&&TimeCurrent()>=HolFirst&&TimeCurrent()<HolLast)HolShutDown=1;
-		else if(HolShutDown==1&&CbT==0)
+		else if(HolShutDown==1&&CbT==NO_BASKET_ORDERS)
 		{	Print("Blessing has shut down for the holidays. From: "+TimeToStr(HolFirst,TIME_DATE)+
 					" To: "+TimeToStr(HolLast,TIME_DATE));
 			if(CpT>0)
@@ -1601,57 +1633,58 @@ int start()
 	//+-----------------------------------------------------------------+  << This must be the first Entry check.
 	//| Moving Average Indicator for Order Entry                        |  << Add your own Indicator Entry checks
 	//+-----------------------------------------------------------------+  << after the Moving Average Entry.
-	if(MAEntry>0&&CbT==0&&CpT<2)
-	{	if(Bid>ima_0+MADistance&&(!B3Traditional||(B3Traditional&&Trend!= TREND_RANGE)))
+	if(MAEntry>0&&CbT==NO_BASKET_ORDERS&&CpT<2)
+	{	if(Bid>ima_0+MADistance&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 		{	
-			if(MAEntry==1){	
+			if(MAEntry==TRADE_BASE){	
 				if(ForceMarketCond!=TREND_DOWN &&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
 					BuyMe=true;
 				else 
 					BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					SellMe=false;
 			}
-			else if(MAEntry==2){	
-				if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
+			else if(MAEntry==TRADE_REVERSE){	
+				if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
 					SellMe=true;
 				else 
 					SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					BuyMe=false;
 			}
 		}
-		else if(Ask<ima_0-MADistance&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+		else if(Ask<ima_0-MADistance&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 		{	
-			if(MAEntry==1)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
+			if(MAEntry==TRADE_BASE)
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
 					SellMe=true;
 				else 
 					SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					BuyMe=false;
 			}
-			else if(MAEntry==2)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
+			else if(MAEntry==TRADE_REVERSE)
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
 					BuyMe=true;
 				else 
 					BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					SellMe=false;
 			}
 		}
-		else if(B3Traditional&&Trend==2)
+		else if(B3Traditional&&Trend==TREND_RANGE)
 		{	
-			if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
+			if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
 				BuyMe=true;
-			if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
+			if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
 				SellMe=true;
 		}
 		else
 		{	BuyMe=false;
 			SellMe=false;
 		}
-		if(IndEntry>0)IndicatorUsed=IndicatorUsed+UAE;
+		if(IndEntry>0)
+			IndicatorUsed=IndicatorUsed+UAE;
 		IndEntry++;
 		IndicatorUsed=IndicatorUsed+" MA ";
 	}
@@ -1660,7 +1693,8 @@ int start()
 	//| CCI of 5M,15M,30M,1H for Market Condition and Order Entry      |
 	//+----------------------------------------------------------------+
 	if(CCIEntry>0)
-	{	double cci_01=iCCI(Symbol(),PERIOD_M5,CCIPeriod,PRICE_CLOSE,0);
+	{	
+		double cci_01=iCCI(Symbol(),PERIOD_M5,CCIPeriod,PRICE_CLOSE,0);
 		double cci_02=iCCI(Symbol(),PERIOD_M15,CCIPeriod,PRICE_CLOSE,0);
 		double cci_03=iCCI(Symbol(),PERIOD_M30,CCIPeriod,PRICE_CLOSE,0);
 		double cci_04=iCCI(Symbol(),PERIOD_H1,CCIPeriod,PRICE_CLOSE,0);
@@ -1669,38 +1703,52 @@ int start()
 		double cci_13=iCCI(Symbol(),PERIOD_M30,CCIPeriod,PRICE_CLOSE,1);
 		double cci_14=iCCI(Symbol(),PERIOD_H1,CCIPeriod,PRICE_CLOSE,1);
 	}
-	if(CCIEntry>0&&CbT==0&&CpT<2)
+	if(CCIEntry>0&&CbT==NO_BASKET_ORDERS&&CpT<2)
 	{	if(cci_11>0&&cci_12>0&&cci_13>0&&cci_14>0&&cci_01>0&&cci_02>0&&cci_03>0&&cci_04>0)
-		{	if(ForceMarketCond==3)Trend=0;
-			if(CCIEntry==1)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
-				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+		{	
+			if(ForceMarketCond==TREND_OFF)
+				Trend=TREND_UP;
+			if(CCIEntry==TRADE_BASE)
+			{	
+				if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))
+					BuyMe=true;
+				else 
+					BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
+					SellMe=false;
 			}
-			else if(CCIEntry==2)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
-				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+			else if(CCIEntry==TRADE_REVERSE)
+			{	
+				if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))
+					SellMe=true;
+				else 
+					SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
+					BuyMe=false;
 			}
 		}
 		else if(cci_11<0&&cci_12<0&&cci_13<0&&cci_14<0&&cci_01<0&&cci_02<0&&cci_03<0&&cci_04<0)
-		{	if(ForceMarketCond==3)Trend=1;
-			if(CCIEntry==1)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+		{	
+			if(ForceMarketCond==TREND_OFF)
+				Trend=TREND_DOWN;
+			if(CCIEntry==TRADE_BASE)
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
-			else if(CCIEntry==2)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			else if(CCIEntry==TRADE_REVERSE)
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 		}
 		else if(!UseAnyEntry&&IndEntry>0)
-		{	BuyMe=false;
+		{	
+			BuyMe=false;
 			SellMe=false;
 		}
-		if(IndEntry>0)IndicatorUsed=IndicatorUsed+UAE;
+		if(IndEntry>0)
+			IndicatorUsed=IndicatorUsed+UAE;
 		IndEntry++;
 		IndicatorUsed=IndicatorUsed+" CCI ";
 	}
@@ -1708,7 +1756,7 @@ int start()
 	//+----------------------------------------------------------------+
 	//| Bollinger Band Indicator for Order Entry                       |
 	//+----------------------------------------------------------------+
-	if(BollingerEntry>0&&CbT==0&&CpT<2)
+	if(BollingerEntry>0&&CbT==NO_BASKET_ORDERS&&CpT<2)
 	{	double ma=iMA(Symbol(),0,BollPeriod,0,MODE_SMA,PRICE_OPEN,0);
 		double stddev=iStdDev(Symbol(),0,BollPeriod,0,MODE_SMA,PRICE_OPEN,0);
 		double bup=ma+(BollDeviation*stddev);
@@ -1723,7 +1771,7 @@ int start()
 				else 
 					BuyMe=false;
 				 
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					SellMe=false;
 			}
 			else if(BollingerEntry==2)
@@ -1733,20 +1781,20 @@ int start()
 				else 
 					SellMe=false;
 				
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))
 					BuyMe=false;
 			}
 		}
 		else if(Bid>bux)
 		{	if(BollingerEntry==1)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
 			else if(BollingerEntry==2)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 		}
 		else if(!UseAnyEntry&&IndEntry>0)
@@ -1761,33 +1809,33 @@ int start()
 	//+----------------------------------------------------------------+
 	//| Stochastic Indicator for Order Entry                           |
 	//+----------------------------------------------------------------+
-	if(StochEntry>0&&CbT==0&&CpT<2)
+	if(StochEntry>0&&CbT==NO_BASKET_ORDERS&&CpT<2)
 	{	int zoneBUY=BuySellStochZone;
 		int zoneSELL=100-BuySellStochZone;
 		double stoc_0=iStochastic(NULL,0,KPeriod,DPeriod,Slowing,MODE_LWMA,1,0,1);
 		double stoc_1=iStochastic(NULL,0,KPeriod,DPeriod,Slowing,MODE_LWMA,1,1,1);
 		if(stoc_0<zoneBUY&&stoc_1<zoneBUY)
 		{	if(StochEntry==1)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 			else if(StochEntry==2)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
 		}
 		else if(stoc_0>zoneSELL&&stoc_1>zoneSELL)
 		{	if(StochEntry==1)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
 			else if(StochEntry==2)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 		}
 		else if(!UseAnyEntry&&IndEntry>0)
@@ -1802,31 +1850,31 @@ int start()
 	//+----------------------------------------------------------------+
 	//| MACD Indicator for Order Entry                                 |
 	//+----------------------------------------------------------------+
-	if(MACDEntry>0&&CbT==0&&CpT<2)
+	if(MACDEntry>0&&CbT==NO_BASKET_ORDERS&&CpT<2)
 	{	double MACDm=iMACD(NULL,TF[MACD_TF],FastPeriod,SlowPeriod,SignalPeriod,MACDPrice,0,0);
 		double MACDs=iMACD(NULL,TF[MACD_TF],FastPeriod,SlowPeriod,SignalPeriod,MACDPrice,1,0);
 		if(MACDm>MACDs)
 		{	if(MACDEntry==1)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 			else if(MACDEntry==2)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
 		}
 		else if(MACDm<MACDs)
 		{	if(MACDEntry==1)
-			{	if(ForceMarketCond!=0&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
+			{	if(ForceMarketCond!=TREND_UP&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&SellMe)))SellMe=true;
 				else SellMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))BuyMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&BuyMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))BuyMe=false;
 			}
 			else if(MACDEntry==2)
-			{	if(ForceMarketCond!=1&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
+			{	if(ForceMarketCond!=TREND_DOWN&&(UseAnyEntry||IndEntry==0||(!UseAnyEntry&&IndEntry>0&&BuyMe)))BuyMe=true;
 				else BuyMe=false;
-				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=2)))SellMe=false;
+				if(!UseAnyEntry&&IndEntry>0&&SellMe&&(!B3Traditional||(B3Traditional&&Trend!=TREND_RANGE)))SellMe=false;
 			}
 		}
 		else if(!UseAnyEntry&&IndEntry>0)
@@ -1845,7 +1893,7 @@ int start()
 	{	BuyMe=false;
 		SellMe=false;
 	}
-	if(ForceMarketCond<2&&IndEntry==0&&CbT==0&&!FirstRun)
+	if(ForceMarketCond<TREND_RANGE&&IndEntry==0&&CbT==NO_BASKET_ORDERS&&!FirstRun)
 	{	
 		if(ForceMarketCond==TREND_UP)
 			BuyMe=true;
@@ -1858,13 +1906,15 @@ int start()
 	//| Trade Selection Logic                                           |
 	//+-----------------------------------------------------------------+
 	OrderLot=LotSize(Lots[StrToInteger(DTS(MathMin(CbT+CbC,MaxTrades-1),0))]*LotMult);
-	if(CbT==0&&CpT<2&&!FirstRun)
+	if(CbT==NO_BASKET_ORDERS&&CpT<2&&!FirstRun)
 	{	
 		if(B3Traditional)
 		{	if(BuyMe)
 			{	
 				//Buy Stop == 0 && Sell Limit == 0	
-				if(CpBS==0&&CpSL==0&&((Trend!=2||MAEntry==0)||(Trend==TREND_RANGE && MAEntry==1)))
+				if(CpBS==NO_BUY_STOP_ORDERS &&
+					CpSL==NO_SELL_LIMIT_ORDERS &&
+					((Trend!=TREND_RANGE||MAEntry==TRADE_OFF)||(Trend==TREND_RANGE && MAEntry==TRADE_BASE)))
 				{
 					Entry=g2-MathMod(Ask,g2)+EntryOffset;
 					if(Entry>StopLevel)
@@ -1877,7 +1927,9 @@ int start()
 						}
 					}
 				}
-				if(CpBL==0&&CpSS==0&&((Trend!=2||MAEntry==0)||(Trend==2&&MAEntry==2)))
+				if(CpBL==NO_BUY_LIMIT_ORDERS &&
+					CpSS==NO_SELL_STOP_ORDERS&&
+					((Trend!=TREND_RANGE||MAEntry==TRADE_OFF)||(Trend==TREND_RANGE&&MAEntry==TRADE_REVERSE)))
 				{	Entry=MathMod(Ask,g2)+EntryOffset;
 					if(Entry>StopLevel)
 					{	Ticket=SendOrder(Symbol(),OP_BUYLIMIT,OrderLot,-Entry,0,Magic,CLR_NONE);
@@ -1889,14 +1941,14 @@ int start()
 				}
 			}
 			if(SellMe)
-			{	if(CpSL==0&&CpBS==0&&((Trend!=2||MAEntry==0)||(Trend==2&&MAEntry==2)))
+			{	if(CpSL==0&&CpBS==0&&((Trend!=TREND_RANGE||MAEntry==TRADE_OFF)||(Trend==TREND_RANGE&&MAEntry==TRADE_REVERSE)))
 				{	Entry=g2-MathMod(Bid,g2)-EntryOffset;
 					if(Entry>StopLevel)
 					{	Ticket=SendOrder(Symbol(),OP_SELLLIMIT,OrderLot,Entry,0,Magic,CLR_NONE);
 						if(Ticket>0&&Debug)Print("Indicator Entry - ("+IndicatorUsed+") SellLimit MC = "+Trend);
 					}
 				}
-				if(CpSS==0&&CpBL==0&&((Trend!=2||MAEntry==0)||(Trend==2&&MAEntry==1)))
+				if(CpSS==0&&CpBL==0&&((Trend!=TREND_RANGE||MAEntry==TRADE_OFF)||(Trend==TREND_RANGE&&MAEntry==TRADE_BASE)))
 				{	Entry=MathMod(Bid,g2)+EntryOffset;
 					if(Entry>StopLevel)
 					{	Ticket=SendOrder(Symbol(),OP_SELLSTOP,OrderLot,-Entry,0,Magic,CLR_NONE);
@@ -2242,7 +2294,7 @@ int start()
 				}
 				else ObjDel("B3AATrn");
 			}
-			else if(Trend==2)
+			else if(Trend==TREND_RANGE)
 			{	ObjSetTxt("B3LTrnd","Trend is Ranging",10,Orange);
 				ObjDel("B3ATrnd");
 				if(StringLen(ATrend)>0)
