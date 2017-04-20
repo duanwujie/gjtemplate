@@ -302,7 +302,7 @@ bool        TradesOpen;
 bool        FileClosed,HedgeTypeDD,hThisChart,hPosCorr,dLabels,FirstRun;
 string      FileName,ID,StatFile;
 double      TPb;
-double      StopLevel;
+double      StopLevel;	//The broker stoplevel allowd 
 double      TargetPips;
 double      LotsBaksetFirst;//Lots of the first basket order
 double      bTS;
@@ -1250,6 +1250,25 @@ int start()
 			Lotsize=LAF*AccountType*Contracts/(1+Factor);
 			LotMult=MathMax(MathFloor(Lotsize/Lot),MinMult);
 			GlobalVariableSet(ID+"LotMult",LotMult);
+
+			/*
+			 *
+			 *  MinMult = 1
+			 *  AccountType = 10
+			 *  LAF = 0.5
+			 *	
+			 *  Contracts = 500/10000 = 0.05
+			 *  
+			 *  Lotsize = 0.5*10*0.05/(1+22) = 0.01
+			 *
+			 *  LotMult = MathMax(x,MinMult) = 1
+			 *
+			 *	Rel Contracts  = 500/1000 = 0.5
+			 *
+			 *  Level 7 = 0.43
+			 */
+
+			
 		}
 	}
 	else if(CountOfBasketOrder==NO_BASKET_ORDERS)
@@ -1949,7 +1968,8 @@ int start()
 	//| Trade Selection Logic                                           |
 	//+-----------------------------------------------------------------+
 	OrderLot=iLotSize(Lots[StrToInteger(DTS(MathMin(CountOfBasketOrder+CbC,MaxTrades-1),0))]*LotMult);
-	if(CountOfBasketOrder==NO_BASKET_ORDERS&&CountOfPendingOrder<2&&!FirstRun)
+	
+	if(CountOfBasketOrder==NO_BASKET_ORDERS && CountOfPendingOrder<2 && !FirstRun)
 	{	
 		if(B3Traditional)
 		{	if(BuyMe)
