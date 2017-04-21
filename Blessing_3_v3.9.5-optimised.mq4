@@ -167,10 +167,28 @@ extern int      MAFilterUpL1        = 5;
 extern int      MAFilterUpL2        = 5;
 extern int      MAFilterUpL3        = 5;
 extern int      MAFilterUpL4        = 5;
+extern int      MAFiltrrUpLimitL1     = 10;
+extern int      MAFiltrrUpLimitL2     = 10;
+extern int      MAFiltrrUpLimitL3     = 10;
+extern int      MAFiltrrUpLimitL4     = 10;
+
 extern int      MAFilterDownL1      = -5;
 extern int      MAFilterDownL2      = -5;
 extern int      MAFilterDownL3      = -5;
 extern int      MAFilterDownL4      = -5;
+
+extern int      MAFiltrrDownLimitL1     = -10;
+extern int      MAFiltrrDownLimitL2     = -10;
+extern int      MAFiltrrDownLimitL3     = -10;
+extern int      MAFiltrrDownLimitL4     = -10;
+
+extern double   MAFactor            = 1000;
+extern double   MAAngleFactor       = 0.017453;
+
+extern int      MAPeroidPrivot      = 114;
+extern double   MAUpRange           = 0.1;
+extern double   MADownRange         = -0.1;
+
 
 extern string   LabelCCI            = "CCI Entry Settings:";
 extern int      CCIPeriod           = 14;       // Period for CCI calculation
@@ -321,6 +339,8 @@ double      StopLevel;	//The broker stoplevel allowd
 double      TargetPips;
 double      LotsBaksetFirst;//Lots of the first basket order
 double      bTS;
+
+
 
 
 
@@ -1769,33 +1789,57 @@ int start()
 	}
 
 
+   
+   
+
 	if(MADiffEntry>0)
 	{
 
-		double mma_01=iMA(NULL,PERIOD_M5,MAPeroid1,0,MODE_SMA,PRICE_CLOSE,0);
-		double mma_02=iMA(NULL,PERIOD_M15,MAPeroid2,0,MODE_SMA,PRICE_CLOSE,0);
-		double mma_03=iMA(NULL,PERIOD_M30,MAPeroid3,0,MODE_SMA,PRICE_CLOSE,0);
-		double mma_04=iMA(NULL,PERIOD_MH1,MAPeroid4,0,MODE_SMA,PRICE_CLOSE,0);
+		double mma_01=iMA(Symbol(),PERIOD_M5,MAPeroid1,0,MODE_SMA,PRICE_CLOSE,0);
+		double mma_02=iMA(Symbol(),PERIOD_M15,MAPeroid2,0,MODE_SMA,PRICE_CLOSE,0);
+		double mma_03=iMA(Symbol(),PERIOD_M30,MAPeroid3,0,MODE_SMA,PRICE_CLOSE,0);
+		double mma_04=iMA(Symbol(),PERIOD_H1,MAPeroid4,0,MODE_SMA,PRICE_CLOSE,0);
 
-		double mma_11=iMA(NULL,PERIOD_M5,MAPeroid1,0,MODE_SMA,PRICE_CLOSE,1);
-		double mma_12=iMA(NULL,PERIOD_M15,MAPeroid2,0,MODE_SMA,PRICE_CLOSE,1);
-		double mma_13=iMA(NULL,PERIOD_M30,MAPeroid3,0,MODE_SMA,PRICE_CLOSE,1);
-		double mma_14=iMA(NULL,PERIOD_MH1,MAPeroid4,0,MODE_SMA,PRICE_CLOSE,1);
+		double mma_11=iMA(Symbol(),PERIOD_M5,MAPeroid1,0,MODE_SMA,PRICE_CLOSE,1);
+		double mma_12=iMA(Symbol(),PERIOD_M15,MAPeroid2,0,MODE_SMA,PRICE_CLOSE,1);
+		double mma_13=iMA(Symbol(),PERIOD_M30,MAPeroid3,0,MODE_SMA,PRICE_CLOSE,1);
+		double mma_14=iMA(Symbol(),PERIOD_H1,MAPeroid4,0,MODE_SMA,PRICE_CLOSE,1);
+		
+		
+		
+		double mma_21=iMA(Symbol(),PERIOD_M5,MAPeroid1,0,MODE_SMA,PRICE_CLOSE,2);
+		double mma_22=iMA(Symbol(),PERIOD_M15,MAPeroid2,0,MODE_SMA,PRICE_CLOSE,2);
+		double mma_23=iMA(Symbol(),PERIOD_M30,MAPeroid3,0,MODE_SMA,PRICE_CLOSE,2);
+		double mma_24=iMA(Symbol(),PERIOD_H1,MAPeroid4,0,MODE_SMA,PRICE_CLOSE,2);
+		
+		
+
+		
 
 
-		double diff1 = mma_01 - mma_11;
-		double diff2 = mma_02 - mma_12;
-		double diff3 = mma_03 - mma_13;
-		double diff4 = mma_04 - mma_14;
+		double diff1 = MAFactor*(mma_01 - mma_11)/MAAngleFactor;
+		double diff2 = MAFactor*(mma_02 - mma_12)/MAAngleFactor;
+		double diff3 = MAFactor*(mma_03 - mma_13)/MAAngleFactor;
+		double diff4 = MAFactor*(mma_04 - mma_14)/MAAngleFactor;
+		
+		
+		double diff5 = MAFactor*(mma_11 - mma_21)/MAAngleFactor;
+		double diff6 = MAFactor*(mma_12 - mma_22)/MAAngleFactor;
+		double diff7 = MAFactor*(mma_13 - mma_23)/MAAngleFactor;
+		double diff8 = MAFactor*(mma_14 - mma_24)/MAAngleFactor;
+		
 
 
-		printf("%f,%f,%f,%f\n",diff1,diff2,diff3,diff4);
+      double diffStochastic = iStochastic(Symbol(),PERIOD_M15,56,12,12,MODE_SMA,0,MODE_MAIN,0);
+
+		//printf("%f,%f,%f,%f\n",diff1,diff2,diff3,diff4);
 
 
 		if(CountOfBasketOrder==NO_BASKET_ORDERS && CountOfPendingOrder<2)
 		{
 
-			if(diff1>MAFilterUpL1 && diff2>MAFilterUpL2 && diff3>MAFilterUpL3 && diff4>MAFilterUpL4)
+			if(diff1>MAFilterUpL1 && diff2>MAFilterUpL2 && diff3>MAFilterUpL3  && diff4>MAFilterUpL4 && diffStochastic<60)
+			//if(diff1>0 && diff1<MAFilterUpL1  && diff2>MAFilterUpL2 && diff3>MAFilterUpL3  && diff4>MAFilterUpL4 )
 			{
 				if(ForceMarketCond==TREND_OFF)
 					Trend=TREND_UP;
@@ -1818,7 +1862,8 @@ int start()
 						BuyMe=false;
 				}
 			}
-			else if(diff1<MAFilterDownL1 && diff2<MAFilterDownL2 && diff3<MAFilterDownL3 && diff4<MAFilterDownL4)
+			else if(diff1<MAFilterDownL1 && diff2<MAFilterDownL2 && diff3<MAFilterDownL3 && diff4<MAFilterDownL4 && diffStochastic > 40)
+			//else if(diff1<0 && diff1>MAFilterDownL1 && diff2<MAFilterDownL2 && diff3<MAFilterDownL3 && diff4<MAFilterDownL4 )
 			{
 				if(ForceMarketCond==TREND_OFF)
 					Trend=TREND_DOWN;
