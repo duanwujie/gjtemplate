@@ -46,13 +46,13 @@ int start()
          WindowRedraw();
          //ObjectCreate("XIT_FIBO",OBJ_FIBO,0,highTime,High[fibHigh],lowTime,Low[fibLow]);
          ObjectCreate("XIT_FIBO",OBJ_FIBO,0,lowTime,Low[fibLow],highTime,High[fibHigh]);
-         color levelColor = Red;
+         color levelColor = clrCoral;
       }
       else{
          WindowRedraw();
          //ObjectCreate("XIT_FIBO",OBJ_FIBO,0,lowTime,Low[fibLow],highTime,High[fibHigh]);
          ObjectCreate("XIT_FIBO",OBJ_FIBO,0,highTime,High[fibHigh],lowTime,Low[fibLow]);
-         levelColor = Green;
+         levelColor = clrOrange;
       }
       
       double fiboPrice1=ObjectGet("XIT_FIBO",OBJPROP_PRICE1);
